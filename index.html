@@ -217,10 +217,32 @@
   .res .n{font-weight:500;font-size:13px}
   .res .m{font-size:11.5px;color:var(--ink-3);grid-column:1}
   .res .k{font-weight:600;font-size:13px;grid-row:1/3;align-self:center}
+  .res.active{border-color:var(--accent);background:var(--accent-soft)}
+  .res mark{background:color-mix(in srgb,var(--accent) 25%,transparent);color:inherit;
+    border-radius:2px;padding:0 1px;font-weight:700}
+  .res .used{font-size:10px;color:var(--accent);font-weight:600;letter-spacing:.04em}
+  .trust{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-3);
+    border:1px solid var(--rule);border-left:3px solid var(--accent);border-radius:2px;
+    padding:5px 8px;margin:-4px 0 10px;line-height:1.35}
+  .qty-tag{font-family:var(--cond);font-size:11px;font-weight:700;letter-spacing:.06em;
+    background:var(--accent);color:var(--card);border-radius:2px;padding:1px 6px;white-space:nowrap}
+  .quicklab{font-size:11.5px;color:var(--ink-3);align-self:center;margin-right:2px}
   .quick{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
   .quick button{border:1px solid var(--rule);background:transparent;border-radius:99px;
     padding:3px 9px;font-size:11.5px;cursor:pointer;color:var(--ink-2)}
   .quick button:hover{border-color:var(--accent);color:var(--accent)}
+  .combo{display:inline-flex;align-items:center;gap:0;border:1px solid var(--rule);
+    border-radius:99px;overflow:hidden}
+  .combo button{border:0;background:transparent;border-radius:0;padding:3px 4px 3px 10px;
+    font-size:11.5px;cursor:pointer;color:var(--ink-2)}
+  .combo .go{padding-right:8px}
+  .combo:hover{border-color:var(--accent)}
+  .combo:hover .go{color:var(--accent)}
+  .combo .cx{color:var(--ink-3);padding:3px 8px 3px 4px;font-size:13px;line-height:1}
+  .combo .cx:hover{color:var(--over)}
+  .savebtn{border:1px dashed var(--rule);background:transparent;color:var(--ink-3);
+    border-radius:var(--r);padding:3px 9px;font-size:11.5px;cursor:pointer}
+  .savebtn:hover{color:var(--accent);border-color:var(--accent)}
   .hint{font-size:11.5px;color:var(--ink-3);margin-top:9px}
 
   /* ---------- week ---------- */
@@ -316,16 +338,20 @@
 
     <!-- ADD FOOD -->
     <section class="card a-add">
-      <h2 class="card-title">Add food <span>60 foods built in</span></h2>
+      <h2 class="card-title">Add food <span id="foodCount">—</span></h2>
+      <p class="trust">One checked entry per food — no user uploads, no duplicates to sort through.</p>
       <div class="seg" id="mealSeg" role="group" aria-label="Which meal"></div>
       <div class="search">
         <span aria-hidden="true">⌕</span>
-        <input id="q" type="search" placeholder="Search chicken, oats, latte…" autocomplete="off" aria-label="Search foods">
+        <input id="q" type="search" placeholder="chicken · 2 eggs · crisps · pop" autocomplete="off"
+               role="combobox" aria-expanded="true" aria-controls="results" aria-label="Search foods">
+        <span class="qty-tag" id="qtyTag" hidden></span>
         <kbd>/</kbd>
       </div>
-      <ul class="results" id="results"></ul>
-      <div class="quick" id="quick"></div>
-      <p class="hint" id="addHint">Tap a food to log one serving. Adjust the amount in the log with − and +.</p>
+      <ul class="results" id="results" role="listbox" aria-label="Matching foods"></ul>
+      <div class="quick" id="usuals"></div>
+      <div class="quick" id="combos"></div>
+      <p class="hint" id="addHint">↑ ↓ to move, ↵ to log. Type a number first — "2 eggs" logs two.</p>
     </section>
 
     <!-- LOG -->
@@ -364,75 +390,188 @@
   var $=function(s,r){return (r||document).querySelector(s);};
 
   /* ---------------- food library ----------------
-     [name, group, portion, kcal, protein, carb, fat, fiber, sugar, satfat, sodium(mg)] */
+     One canonical entry per food. No user uploads, no duplicates.
+     [name, group, portion, kcal, protein, carb, fat, fiber, sugar, satfat, sodium(mg), search aliases] */
   var RAW=[
-    ["Grilled chicken breast","Protein","1 palm (120 g)",198,37,0,4.3,0,0,1.2,88],
-    ["Baked salmon fillet","Protein","1 palm (120 g)",250,25,0,16,0,0,3.4,78],
-    ["Egg, large","Protein","1 egg (50 g)",72,6.3,0.4,4.8,0,0.2,1.6,71],
-    ["Greek yogurt, plain 2%","Protein","1 cup (200 g)",146,20,8,4,0,7,2.5,68],
-    ["Tuna, canned in water","Protein","1 can (142 g)",142,33,0,1,0,0,0.3,450],
-    ["Firm tofu","Protein","Half block (120 g)",144,15,3.5,8.7,2,1,1.3,17],
-    ["Black beans, cooked","Protein","1 cup (172 g)",227,15,41,0.9,15,0.6,0.2,2],
-    ["Lentils, cooked","Protein","1 cup (198 g)",230,18,40,0.8,16,3.6,0.1,4],
-    ["Ground beef, 90% lean","Protein","1 palm (113 g)",218,24,0,13,0,0,5,75],
-    ["Shrimp, cooked","Protein","1 palm (110 g)",110,23,1,1.5,0,0,0.3,600],
-    ["Pork loin chop","Protein","1 palm (120 g)",206,31,0,8,0,0,2.8,60],
-    ["Turkey deli slices","Protein","3 slices (56 g)",60,10,2,1,0,1,0.3,540],
-    ["Whey protein powder","Protein","1 scoop (31 g)",120,24,3,1.5,0,1,0.5,50],
-    ["Cottage cheese, low-fat","Protein","1 cup (226 g)",163,28,6.2,2.3,0,6,1.4,746],
+    ["Grilled chicken breast","Protein","1 palm (120 g)",198,37,0,4.3,0,0,1.2,88,"chicken breast poultry"],
+    ["Chicken thigh, roasted","Protein","1 palm (120 g)",209,26,0,11,0,0,3,95,"chicken dark meat poultry"],
+    ["Rotisserie chicken","Protein","1 palm (120 g)",220,29,0,11,0,0,3.1,480,"chicken roast supermarket"],
+    ["Chicken nuggets","Meals","6 pieces (96 g)",270,14,16,16,1,0.3,3,540,"chicken fast food mcnuggets"],
+    ["Turkey breast, roasted","Protein","1 palm (120 g)",152,34,0,1,0,0,0.3,60,"turkey poultry"],
+    ["Turkey deli slices","Protein","3 slices (56 g)",60,10,2,1,0,1,0.3,540,"turkey lunch meat cold cuts sandwich"],
+    ["Ham, sliced","Protein","3 slices (56 g)",69,10,1.5,2.5,0,1,0.8,750,"ham deli lunch meat pork"],
+    ["Bacon","Protein","2 slices (16 g)",87,6,0.2,6.7,0,0,2.2,370,"bacon pork rashers"],
+    ["Pork sausage links","Protein","2 links (68 g)",220,12,1,18,0,0,6,480,"sausage banger pork"],
+    ["Steak, sirloin","Protein","1 palm (120 g)",250,32,0,13,0,0,5,65,"beef steak sirloin"],
+    ["Ground beef, 90% lean","Protein","1 palm (113 g)",218,24,0,13,0,0,5,75,"beef mince hamburger meat"],
+    ["Pork loin chop","Protein","1 palm (120 g)",206,31,0,8,0,0,2.8,60,"pork chop"],
+    ["Beef jerky","Snacks","1 oz (28 g)",116,9.4,3.1,7.3,0.5,2.6,3.1,590,"jerky dried beef"],
+    ["Baked salmon fillet","Protein","1 palm (120 g)",250,25,0,16,0,0,3.4,78,"salmon fish"],
+    ["Cod fillet, baked","Protein","1 palm (120 g)",105,23,0,0.9,0,0,0.2,78,"cod fish white"],
+    ["Tilapia, baked","Protein","1 palm (120 g)",128,26,0,2.6,0,0,0.9,66,"tilapia fish"],
+    ["Tuna, canned in water","Protein","1 can (142 g)",142,33,0,1,0,0,0.3,450,"tuna fish tinned canned"],
+    ["Sardines, canned","Protein","1 tin (92 g)",191,23,0,10.5,0,0,1.4,465,"sardines fish tinned"],
+    ["Shrimp, cooked","Protein","1 palm (110 g)",110,23,1,1.5,0,0,0.3,600,"shrimp prawns seafood"],
+    ["Egg, large","Protein","1 egg (50 g)",72,6.3,0.4,4.8,0,0.2,1.6,71,"egg eggs boiled"],
+    ["Scrambled eggs","Protein","2 eggs (120 g)",182,12,2,13,0,1.6,4,340,"eggs scrambled"],
+    ["Egg white","Protein","1 white (33 g)",17,3.6,0.2,0.1,0,0.2,0,55,"egg whites"],
+    ["Firm tofu","Protein","Half block (120 g)",144,15,3.5,8.7,2,1,1.3,17,"tofu soy vegetarian vegan"],
+    ["Tempeh","Protein","Half block (85 g)",162,17,7.8,9,0,0,1.8,9,"tempeh soy vegan"],
+    ["Edamame, shelled","Protein","1 cup (155 g)",188,18,14,8,8,3.4,0.9,9,"edamame soy beans vegan"],
+    ["Black beans, cooked","Protein","1 cup (172 g)",227,15,41,0.9,15,0.6,0.2,2,"beans black legume vegan"],
+    ["Kidney beans, cooked","Protein","1 cup (177 g)",225,15,40,0.9,13,0.6,0.1,2,"beans kidney legume"],
+    ["Chickpeas, cooked","Protein","1 cup (164 g)",269,15,45,4.2,12.5,8,0.4,11,"chickpeas garbanzo beans"],
+    ["Refried beans","Protein","Half cup (120 g)",118,7,20,1.6,6.5,0.5,0.6,375,"beans refried mexican"],
+    ["Lentils, cooked","Protein","1 cup (198 g)",230,18,40,0.8,16,3.6,0.1,4,"lentils dal legume vegan"],
+    ["Whey protein powder","Protein","1 scoop (31 g)",120,24,3,1.5,0,1,0.5,50,"protein powder whey shake supplement"],
+    ["Protein shake, bottled","Protein","1 bottle (325 g)",160,30,5,3,1,1,0.5,200,"protein shake drink rtd"],
+    ["Greek yogurt, plain 2%","Protein","1 cup (200 g)",146,20,8,4,0,7,2.5,68,"yogurt yoghurt greek"],
+    ["Nonfat Greek yogurt","Protein","1 cup (170 g)",100,18,6,0,0,4,0,60,"yogurt yoghurt skyr nonfat fat free"],
+    ["Cottage cheese, low-fat","Protein","1 cup (226 g)",163,28,6.2,2.3,0,6,1.4,746,"cottage cheese curd"],
 
-    ["Brown rice, cooked","Grains","1 cupped hand (150 g)",166,3.8,34,1.3,2.2,0.5,0.3,5],
-    ["White rice, cooked","Grains","1 cupped hand (150 g)",195,4,42,0.4,0.6,0.1,0.1,2],
-    ["Whole-wheat bread","Grains","2 slices (56 g)",138,7.2,23,2.2,4,3,0.5,264],
-    ["Rolled oats, dry","Grains","Half cup (40 g)",150,5.3,27,2.6,4,0.4,0.5,0],
-    ["Pasta, cooked","Grains","1 cupped hand (140 g)",220,8,43,1.3,2.5,1,0.2,1],
-    ["Sweet potato, baked","Grains","1 medium (150 g)",135,2.5,31,0.2,4.8,9.4,0,54],
-    ["Potato, baked with skin","Grains","1 medium (173 g)",161,4.3,37,0.2,3.8,2,0,17],
-    ["Quinoa, cooked","Grains","1 cupped hand (150 g)",180,6.6,31,2.9,3.9,1.3,0.3,10],
-    ["Bagel, plain","Grains","1 bagel (98 g)",257,10,50,1.5,2.1,5,0.2,439],
-    ["Flour tortilla, 8 in","Grains","1 tortilla (49 g)",146,4,24,3.7,1.4,1,1.4,391],
-    ["Corn tortillas","Grains","2 small (52 g)",104,2.7,22,1.3,3,0.4,0.2,22],
+    ["Rolled oats, dry","Grains","Half cup (40 g)",150,5.3,27,2.6,4,0.4,0.5,0,"oats oatmeal porridge"],
+    ["Oatmeal with milk and berries","Meals","1 bowl (330 g)",290,11,48,6,6,16,1.6,110,"oatmeal porridge breakfast"],
+    ["Corn flakes cereal","Grains","1 cup (28 g)",100,2,24,0.1,1,3,0,200,"cereal corn flakes breakfast"],
+    ["Granola","Grains","Half cup (50 g)",220,5,33,8,4,10,1.5,30,"granola muesli cereal"],
+    ["Brown rice, cooked","Grains","1 cupped hand (150 g)",166,3.8,34,1.3,2.2,0.5,0.3,5,"rice brown"],
+    ["White rice, cooked","Grains","1 cupped hand (150 g)",195,4,42,0.4,0.6,0.1,0.1,2,"rice white jasmine basmati"],
+    ["Quinoa, cooked","Grains","1 cupped hand (150 g)",180,6.6,31,2.9,3.9,1.3,0.3,10,"quinoa grain"],
+    ["Couscous, cooked","Grains","1 cupped hand (157 g)",176,6,36,0.3,2.2,0.2,0,8,"couscous grain"],
+    ["Barley, cooked","Grains","1 cupped hand (157 g)",193,3.5,44,0.7,6,0.4,0.1,5,"barley grain"],
+    ["Pasta, cooked","Grains","1 cupped hand (140 g)",220,8,43,1.3,2.5,1,0.2,1,"pasta spaghetti penne noodles"],
+    ["Instant ramen noodles","Grains","1 pack (85 g)",380,8,52,14,2,1,7,1500,"ramen noodles instant packet"],
+    ["Whole-wheat bread","Grains","2 slices (56 g)",138,7.2,23,2.2,4,3,0.5,264,"bread brown wholemeal wholewheat toast"],
+    ["White bread","Grains","2 slices (50 g)",133,3.8,25,1.7,1.2,3,0.4,290,"bread white toast"],
+    ["Sourdough bread","Grains","1 slice (57 g)",150,6,30,1,1.5,1,0.2,330,"bread sourdough toast"],
+    ["English muffin","Grains","1 muffin (57 g)",134,4.4,26,1,1.5,2,0.2,240,"english muffin bread"],
+    ["Bagel, plain","Grains","1 bagel (98 g)",257,10,50,1.5,2.1,5,0.2,439,"bagel bread"],
+    ["Pita bread","Grains","1 pita (60 g)",165,5.5,33,0.7,1.3,0.4,0.1,322,"pita flatbread bread"],
+    ["Naan","Grains","1 piece (90 g)",262,9,45,5,2,3,1.2,420,"naan flatbread indian bread"],
+    ["Flour tortilla, 8 in","Grains","1 tortilla (49 g)",146,4,24,3.7,1.4,1,1.4,391,"tortilla wrap flour"],
+    ["Corn tortillas","Grains","2 small (52 g)",104,2.7,22,1.3,3,0.4,0.2,22,"tortilla corn taco"],
+    ["Croissant","Grains","1 medium (57 g)",231,4.7,26,12,1.5,6,6.6,424,"croissant pastry bakery"],
+    ["Buttermilk biscuit","Grains","1 biscuit (60 g)",212,4,26,10,0.8,2,3,580,"biscuit southern bread roll"],
+    ["Pancakes","Grains","2 medium (77 g)",175,5,22,7,0.7,4,1.6,440,"pancakes flapjacks breakfast"],
+    ["Saltine crackers","Grains","6 crackers (18 g)",78,1.6,13,1.7,0.5,0,0.4,190,"crackers saltines"],
+    ["Rice cakes","Grains","2 cakes (18 g)",70,1.5,14.6,0.5,0.8,0.1,0.1,58,"rice cakes snack"],
+    ["Popcorn, air-popped","Snacks","3 cups (24 g)",93,3,19,1.1,3.5,0.2,0.2,2,"popcorn"],
+    ["Pretzels","Snacks","1 oz (28 g)",108,2.6,23,0.8,0.9,0.5,0.2,352,"pretzels snack"],
+    ["Sweet potato, baked","Grains","1 medium (150 g)",135,2.5,31,0.2,4.8,9.4,0,54,"sweet potato yam"],
+    ["Potato, baked with skin","Grains","1 medium (173 g)",161,4.3,37,0.2,3.8,2,0,17,"potato baked jacket"],
 
-    ["Banana","Produce","1 medium (118 g)",105,1.3,27,0.4,3.1,14,0.1,1],
-    ["Apple","Produce","1 medium (182 g)",95,0.5,25,0.3,4.4,19,0.1,2],
-    ["Blueberries","Produce","1 cup (148 g)",84,1.1,21,0.5,3.6,15,0,1],
-    ["Strawberries","Produce","1 cup (152 g)",49,1,12,0.5,3,7.4,0,2],
-    ["Orange","Produce","1 medium (140 g)",66,1.2,17,0.2,3.4,12,0,0],
-    ["Grapes","Produce","1 cup (151 g)",104,1.1,27,0.2,1.4,23,0.1,3],
-    ["Broccoli, steamed","Produce","1 fist (156 g)",55,3.7,11,0.6,5.1,2.2,0.1,64],
-    ["Spinach, raw","Produce","2 fists (60 g)",14,1.7,2.2,0.2,1.3,0.3,0,47],
-    ["Mixed salad greens","Produce","2 fists (72 g)",13,1.2,2.5,0.2,1.5,0.6,0,20],
-    ["Baby carrots","Produce","10 pieces (85 g)",35,0.6,8.2,0.1,2.9,4,0,66],
-    ["Bell pepper","Produce","1 medium (119 g)",31,1.2,7.2,0.4,2.5,5,0,4],
-    ["Avocado","Produce","Half fruit (100 g)",160,2,8.5,14.7,6.7,0.7,2.1,7],
+    ["Banana","Produce","1 medium (118 g)",105,1.3,27,0.4,3.1,14,0.1,1,"banana fruit"],
+    ["Apple","Produce","1 medium (182 g)",95,0.5,25,0.3,4.4,19,0.1,2,"apple fruit"],
+    ["Pear","Produce","1 medium (178 g)",101,0.6,27,0.2,5.5,17,0,2,"pear fruit"],
+    ["Orange","Produce","1 medium (140 g)",66,1.2,17,0.2,3.4,12,0,0,"orange citrus fruit"],
+    ["Peach","Produce","1 medium (150 g)",59,1.4,14,0.4,2.3,13,0,0,"peach fruit"],
+    ["Mango","Produce","1 cup (165 g)",99,1.4,25,0.6,2.6,23,0.2,2,"mango fruit tropical"],
+    ["Pineapple","Produce","1 cup (165 g)",83,0.9,22,0.2,2.3,16,0,2,"pineapple fruit tropical"],
+    ["Watermelon","Produce","1 cup (152 g)",46,0.9,11.5,0.2,0.6,9.4,0,2,"watermelon melon fruit"],
+    ["Grapes","Produce","1 cup (151 g)",104,1.1,27,0.2,1.4,23,0.1,3,"grapes fruit"],
+    ["Blueberries","Produce","1 cup (148 g)",84,1.1,21,0.5,3.6,15,0,1,"blueberries berries fruit"],
+    ["Strawberries","Produce","1 cup (152 g)",49,1,12,0.5,3,7.4,0,2,"strawberries berries fruit"],
+    ["Raspberries","Produce","1 cup (123 g)",64,1.5,15,0.8,8,5.4,0,1,"raspberries berries fruit"],
+    ["Dates, Medjool","Produce","2 dates (48 g)",133,0.8,36,0.1,3.2,32,0,1,"dates dried fruit"],
+    ["Raisins","Produce","1 small box (43 g)",129,1.3,34,0.2,1.6,28,0,5,"raisins sultanas dried fruit"],
+    ["Avocado","Produce","Half fruit (100 g)",160,2,8.5,14.7,6.7,0.7,2.1,7,"avocado guacamole"],
+    ["Olives","Produce","10 olives (34 g)",41,0.3,2.3,3.8,1.1,0,0.5,500,"olives"],
+    ["Broccoli, steamed","Produce","1 fist (156 g)",55,3.7,11,0.6,5.1,2.2,0.1,64,"broccoli vegetable greens"],
+    ["Cauliflower","Produce","1 fist (107 g)",27,2,5.3,0.3,2.1,2,0,32,"cauliflower vegetable"],
+    ["Brussels sprouts","Produce","1 fist (88 g)",38,3,8,0.3,3.3,2,0.1,22,"brussels sprouts vegetable"],
+    ["Green beans","Produce","1 fist (125 g)",44,2.4,10,0.3,4,2,0,1,"green beans vegetable"],
+    ["Asparagus","Produce","1 fist (134 g)",27,3,5.2,0.2,2.8,2.5,0,3,"asparagus vegetable"],
+    ["Zucchini","Produce","1 medium (196 g)",33,2.4,6.1,0.6,2,4.9,0.1,16,"zucchini courgette vegetable"],
+    ["Mushrooms","Produce","1 cup (70 g)",15,2.2,2.3,0.2,0.7,1.2,0,4,"mushrooms vegetable"],
+    ["Bell pepper","Produce","1 medium (119 g)",31,1.2,7.2,0.4,2.5,5,0,4,"pepper capsicum vegetable"],
+    ["Tomato","Produce","1 medium (123 g)",22,1.1,4.8,0.2,1.5,3.2,0,6,"tomato vegetable salad"],
+    ["Cucumber","Produce","Half cucumber (150 g)",23,1,5.4,0.2,0.8,2.6,0,3,"cucumber salad vegetable"],
+    ["Onion","Produce","Half medium (55 g)",22,0.6,5.1,0.1,0.9,2.3,0,2,"onion vegetable"],
+    ["Baby carrots","Produce","10 pieces (85 g)",35,0.6,8.2,0.1,2.9,4,0,66,"carrots vegetable snack"],
+    ["Corn kernels","Produce","1 cup (164 g)",143,5.4,31,2.2,3.6,6.4,0.3,23,"corn sweetcorn vegetable"],
+    ["Green peas","Produce","1 cup (160 g)",134,8.6,25,0.4,8.8,9.5,0.1,5,"peas vegetable"],
+    ["Spinach, raw","Produce","2 fists (60 g)",14,1.7,2.2,0.2,1.3,0.3,0,47,"spinach greens leafy salad"],
+    ["Kale, raw","Produce","2 fists (67 g)",33,2.9,6,0.6,2.6,1.4,0.1,25,"kale greens leafy"],
+    ["Mixed salad greens","Produce","2 fists (72 g)",13,1.2,2.5,0.2,1.5,0.6,0,20,"salad greens lettuce leaves"],
 
-    ["Almonds","Fats","Small handful (28 g)",164,6,6.1,14,3.5,1.2,1.1,0],
-    ["Peanut butter","Fats","2 tbsp (32 g)",188,8,6.9,16,1.6,3,3.3,152],
-    ["Olive oil","Fats","1 tbsp (13.5 g)",119,0,0,13.5,0,0,1.9,0],
-    ["Butter","Fats","1 tbsp (14 g)",102,0.1,0,11.5,0,0,7.3,91],
-    ["Walnuts","Fats","Small handful (28 g)",185,4.3,3.9,18.5,1.9,0.7,1.7,1],
-    ["Cheddar cheese","Fats","1 slice (28 g)",113,7,0.4,9.3,0,0.1,5.3,180],
-    ["Hummus","Fats","3 tbsp (45 g)",74,2,6,5,3,0,0.7,170],
+    ["Almonds","Fats","Small handful (28 g)",164,6,6.1,14,3.5,1.2,1.1,0,"almonds nuts"],
+    ["Walnuts","Fats","Small handful (28 g)",185,4.3,3.9,18.5,1.9,0.7,1.7,1,"walnuts nuts"],
+    ["Cashews","Fats","Small handful (28 g)",157,5.2,8.6,12.4,0.9,1.7,2.2,3,"cashews nuts"],
+    ["Peanuts","Fats","Small handful (28 g)",161,7.3,4.6,14,2.4,1.3,1.9,5,"peanuts nuts"],
+    ["Peanut butter","Fats","2 tbsp (32 g)",188,8,6.9,16,1.6,3,3.3,152,"peanut butter pb spread"],
+    ["Almond butter","Fats","2 tbsp (32 g)",196,6.7,6.1,17.8,3.3,1.4,1.4,2,"almond butter spread"],
+    ["Chia seeds","Fats","1 tbsp (12 g)",58,2,5,3.7,4.1,0,0.4,2,"chia seeds"],
+    ["Olive oil","Fats","1 tbsp (13.5 g)",119,0,0,13.5,0,0,1.9,0,"olive oil cooking fat"],
+    ["Coconut oil","Fats","1 tbsp (13.6 g)",121,0,0,13.5,0,0,11.2,0,"coconut oil cooking fat"],
+    ["Butter","Fats","1 tbsp (14 g)",102,0.1,0,11.5,0,0,7.3,91,"butter spread"],
+    ["Mayonnaise","Fats","1 tbsp (14 g)",94,0.1,0.1,10.3,0,0.1,1.6,88,"mayo mayonnaise condiment"],
+    ["Ranch dressing","Fats","2 tbsp (30 g)",129,0.4,1.8,13.4,0,1.4,2.1,270,"ranch dressing salad condiment"],
+    ["Cream cheese","Fats","2 tbsp (29 g)",99,1.7,1.6,9.8,0,1.6,5.6,91,"cream cheese spread"],
+    ["Sour cream","Fats","2 tbsp (24 g)",46,0.6,1,4.5,0,0.8,2.6,12,"sour cream condiment"],
+    ["Cheddar cheese","Fats","1 slice (28 g)",113,7,0.4,9.3,0,0.1,5.3,180,"cheese cheddar"],
+    ["Mozzarella cheese","Fats","1 oz (28 g)",85,6.3,0.6,6.3,0,0.3,3.7,178,"cheese mozzarella"],
+    ["Parmesan, grated","Fats","2 tbsp (10 g)",42,3.8,0.4,2.8,0,0.1,1.7,170,"cheese parmesan"],
+    ["String cheese","Snacks","1 stick (28 g)",80,6,1,6,0,0,3.5,200,"cheese string snack babybel"],
+    ["Hummus","Fats","3 tbsp (45 g)",74,2,6,5,3,0,0.7,170,"hummus dip"],
 
-    ["Whole milk","Drinks","1 cup (244 g)",149,7.7,12,8,0,12,4.6,105],
-    ["Oat milk, unsweetened","Drinks","1 cup (240 g)",90,3,16,1.5,2,0,0,100],
-    ["Latte, whole milk","Drinks","12 oz (355 g)",190,10,15,10,0,14,6,150],
-    ["Black coffee","Drinks","1 cup (240 g)",2,0.3,0,0,0,0,0,5],
-    ["Orange juice","Drinks","1 cup (248 g)",112,1.7,26,0.5,0.5,21,0.1,2],
-    ["Beer, regular","Drinks","1 can (356 g)",153,1.6,13,0,0,0,0,14],
-    ["Cola","Drinks","1 can (368 g)",155,0,39,0,0,39,0,45],
+    ["Whole milk","Drinks","1 cup (244 g)",149,7.7,12,8,0,12,4.6,105,"milk whole dairy"],
+    ["Milk, 2%","Drinks","1 cup (244 g)",122,8,12,4.8,0,12,3,115,"milk semi skimmed dairy"],
+    ["Oat milk, unsweetened","Drinks","1 cup (240 g)",90,3,16,1.5,2,0,0,100,"oat milk dairy free"],
+    ["Almond milk, unsweetened","Drinks","1 cup (240 g)",39,1.5,3.4,2.5,0.5,2,0,176,"almond milk dairy free"],
+    ["Black coffee","Drinks","1 cup (240 g)",2,0.3,0,0,0,0,0,5,"coffee americano black espresso"],
+    ["Latte, whole milk","Drinks","12 oz (355 g)",190,10,15,10,0,14,6,150,"latte coffee milk"],
+    ["Cappuccino","Drinks","8 oz (236 g)",74,4,6,4,0,6,2.3,60,"cappuccino coffee"],
+    ["Tea, unsweetened","Drinks","1 cup (240 g)",2,0,0.5,0,0,0,0,7,"tea black green"],
+    ["Orange juice","Drinks","1 cup (248 g)",112,1.7,26,0.5,0.5,21,0.1,2,"orange juice oj"],
+    ["Fruit smoothie","Drinks","16 oz (450 g)",290,5,62,2,5,52,0.8,90,"smoothie fruit drink"],
+    ["Cola","Drinks","1 can (368 g)",155,0,39,0,0,39,0,45,"cola soda pop coke soft drink"],
+    ["Diet soda","Drinks","1 can (355 g)",2,0,0.4,0,0,0,0,40,"diet soda pop zero coke"],
+    ["Sports drink","Drinks","1 bottle (591 g)",140,0,36,0,0,34,0,270,"sports drink gatorade electrolyte"],
+    ["Energy drink","Drinks","1 can (250 g)",110,0,28,0,0,27,0,105,"energy drink"],
+    ["Beer, regular","Drinks","1 can (356 g)",153,1.6,13,0,0,0,0,14,"beer lager alcohol"],
+    ["Red wine","Drinks","1 glass (147 g)",125,0.1,3.8,0,0,0.9,0,6,"wine red alcohol"],
+    ["Spirits, 1 shot","Drinks","1 shot (42 g)",97,0,0,0,0,0,0,0,"vodka gin rum whiskey tequila alcohol shot"],
 
-    ["Cheese pizza","Meals","1 slice (107 g)",285,12,36,10,2.5,3.8,4.5,640],
-    ["Chicken burrito bowl","Meals","1 bowl (510 g)",630,45,68,17,12,5,5,1300],
-    ["Cheeseburger, fast food","Meals","1 burger (154 g)",420,23,35,21,2,8,9,1050],
-    ["French fries","Meals","1 medium (117 g)",365,4,48,17,4,0.3,2.5,246],
-    ["Protein bar","Snacks","1 bar (60 g)",220,20,23,7,5,3,3,190],
-    ["Dark chocolate, 70%","Snacks","3 squares (30 g)",170,2.2,13,12,3.1,7,7,6],
-    ["Vanilla ice cream","Snacks","Half cup (66 g)",137,2.3,16,7.3,0.5,14,4.5,53],
-    ["Potato chips","Snacks","Small bag (28 g)",152,1.8,15,9.5,1.3,0.2,1.2,149],
-    ["Granola bar","Snacks","1 bar (40 g)",180,3,29,6,2,11,1.5,95]
+    ["Chicken burrito bowl","Meals","1 bowl (510 g)",630,45,68,17,12,5,5,1300,"burrito bowl chipotle mexican"],
+    ["Bean and cheese burrito","Meals","1 burrito (250 g)",560,20,72,20,10,4,8,1300,"burrito bean mexican"],
+    ["Beef tacos","Meals","2 tacos (160 g)",340,16,28,18,4,2,7,620,"tacos beef mexican"],
+    ["Cheese quesadilla","Meals","1 quesadilla (150 g)",420,18,38,22,3,3,11,900,"quesadilla mexican cheese"],
+    ["Cheese pizza","Meals","1 slice (107 g)",285,12,36,10,2.5,3.8,4.5,640,"pizza slice"],
+    ["Cheeseburger, fast food","Meals","1 burger (154 g)",420,23,35,21,2,8,9,1050,"burger cheeseburger fast food"],
+    ["French fries","Meals","1 medium (117 g)",365,4,48,17,4,0.3,2.5,246,"fries chips fast food"],
+    ["Potato chips","Snacks","Small bag (28 g)",152,1.8,15,9.5,1.3,0.2,1.2,149,"chips crisps snack"],
+    ["Turkey sandwich","Meals","1 sandwich (200 g)",390,24,44,12,4,7,3.5,1200,"sandwich turkey deli sub"],
+    ["Peanut butter and jelly sandwich","Meals","1 sandwich (110 g)",378,12,50,15,4,18,3,450,"pbj sandwich peanut butter jelly jam"],
+    ["Bagel with cream cheese","Meals","1 bagel (127 g)",356,11.7,51.6,11.3,2.1,6.6,5.8,530,"bagel cream cheese breakfast"],
+    ["Scrambled eggs on toast","Meals","1 plate (180 g)",350,18,28,18,3,4,6,600,"eggs toast breakfast"],
+    ["Chicken caesar salad","Meals","1 bowl (300 g)",470,35,12,32,3,4,7,980,"caesar salad chicken"],
+    ["Caesar salad, no chicken","Meals","1 bowl (180 g)",280,6,10,24,3,3,5,680,"caesar salad"],
+    ["Greek salad","Meals","1 bowl (250 g)",230,7,12,18,4,7,6,750,"greek salad feta"],
+    ["Salmon avocado sushi roll","Meals","6 pieces (170 g)",304,10,46,8,4,6,1.4,480,"sushi roll salmon japanese"],
+    ["Pad thai","Meals","1 plate (400 g)",720,25,90,28,4,20,5,1500,"pad thai noodles thai"],
+    ["Chicken curry with rice","Meals","1 plate (450 g)",650,35,70,25,5,8,9,1200,"curry chicken indian rice"],
+    ["Spaghetti bolognese","Meals","1 plate (400 g)",590,28,70,20,6,10,7,900,"spaghetti bolognese pasta italian"],
+    ["Ramen, restaurant bowl","Meals","1 bowl (600 g)",600,28,70,22,5,6,8,2500,"ramen noodles japanese"],
+    ["Apple with peanut butter","Snacks","1 serving (214 g)",283,8.5,32,16,6,22,3.4,152,"apple peanut butter snack"],
+    ["Yogurt parfait","Snacks","1 cup (227 g)",250,10,40,5,2,28,2.5,110,"parfait yogurt granola"],
+    ["Protein bar","Snacks","1 bar (60 g)",220,20,23,7,5,3,3,190,"protein bar snack"],
+    ["Granola bar","Snacks","1 bar (40 g)",180,3,29,6,2,11,1.5,95,"granola bar cereal bar snack"],
+    ["Trail mix","Snacks","Small handful (40 g)",190,5,18,11,3,12,2,60,"trail mix nuts snack"],
+    ["Dark chocolate, 70%","Snacks","3 squares (30 g)",170,2.2,13,12,3.1,7,7,6,"chocolate dark"],
+    ["Chocolate chip cookie","Snacks","1 cookie (35 g)",160,1.8,22,8,0.8,13,3.5,110,"cookie biscuit chocolate chip"],
+    ["Brownie","Snacks","1 square (56 g)",220,2.6,32,10,1.4,24,2.5,120,"brownie chocolate cake"],
+    ["Glazed donut","Snacks","1 donut (60 g)",240,3.5,27,14,1,12,6,280,"donut doughnut pastry"],
+    ["Blueberry muffin","Snacks","1 muffin (113 g)",400,6,55,18,2,32,3.5,340,"muffin blueberry bakery"],
+    ["Vanilla ice cream","Snacks","Half cup (66 g)",137,2.3,16,7.3,0.5,14,4.5,53,"ice cream vanilla dessert"],
+
+    ["Ketchup","Extras","1 tbsp (17 g)",17,0.2,4.5,0,0.1,3.7,0,154,"ketchup sauce condiment"],
+    ["Mustard","Extras","1 tsp (5 g)",3,0.2,0.3,0.2,0.1,0,0,55,"mustard condiment"],
+    ["Soy sauce","Extras","1 tbsp (16 g)",8,1.3,0.8,0,0.1,0.1,0,879,"soy sauce condiment"],
+    ["Salsa","Extras","2 tbsp (36 g)",9,0.4,2,0.1,0.5,1.2,0,230,"salsa sauce dip condiment"],
+    ["Honey","Extras","1 tbsp (21 g)",64,0.1,17,0,0,17,0,1,"honey sweetener"],
+    ["Maple syrup","Extras","2 tbsp (40 g)",104,0,27,0,0,24,0,5,"maple syrup sweetener pancakes"],
+    ["Sugar, white","Extras","1 tsp (4 g)",16,0,4,0,0,4,0,0,"sugar sweetener"]
   ];
-  var KEYS=["name","group","portion","kcal","p","c","f","fib","sug","sat","sod"];
+  var KEYS=["name","group","portion","kcal","p","c","f","fib","sug","sat","sod","alias"];
   var FOODS=RAW.map(function(r,i){
     var o={id:i};
     KEYS.forEach(function(k,j){o[k]=r[j];});
@@ -451,13 +590,126 @@
   var MEALS=[{id:"breakfast",label:"Breakfast"},{id:"lunch",label:"Lunch"},
              {id:"dinner",label:"Dinner"},{id:"snack",label:"Snacks"}];
   var MEALCOLOR={breakfast:"var(--c)",lunch:"var(--p)",dinner:"var(--f)",snack:"var(--accent)"};
+  var NAMEMAP={};
+  FOODS.forEach(function(f){NAMEMAP[f.name]=f.id;});
+  function byName(n){return NAMEMAP[n];}
 
-  function byName(n){for(var i=0;i<FOODS.length;i++){if(FOODS[i].name===n)return FOODS[i].id;}return 0;}
+  /* ---------------- search index ---------------- */
+  function toks(s){
+    return (s||"").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  }
+  var INDEX=FOODS.map(function(f){
+    return {f:f,name:f.name.toLowerCase(),toks:toks(f.name),
+            alias:(f.alias||"").toLowerCase(),atoks:toks(f.alias),grp:f.group.toLowerCase()};
+  });
+  /* edit distance of at most one — catches "chiken", "yoghurt", "brocoli" */
+  function withinOne(a,b){
+    if(a===b)return true;
+    var la=a.length,lb=b.length;
+    if(Math.abs(la-lb)>1)return false;
+    var i=0,j=0,diff=0;
+    while(i<la&&j<lb){
+      if(a.charAt(i)===b.charAt(j)){i++;j++;continue;}
+      if(++diff>1)return false;
+      if(la>lb){i++;}else if(lb>la){j++;}else{i++;j++;}
+    }
+    if(i<la||j<lb)diff++;
+    return diff<=1;
+  }
+  function scoreTerm(rec,t){
+    var best=0,i,all;
+    if(rec.name.indexOf(t)===0)best=1000;
+    if(best<820){for(i=0;i<rec.toks.length;i++){if(rec.toks[i].indexOf(t)===0){best=820;break;}}}
+    if(best<760){for(i=0;i<rec.atoks.length;i++){if(rec.atoks[i].indexOf(t)===0){best=760;break;}}}
+    if(best<640&&rec.name.indexOf(t)>-1)best=640;
+    if(best<520&&rec.alias.indexOf(t)>-1)best=520;
+    if(best<380&&rec.grp.indexOf(t)===0)best=380;
+    if(!best&&t.length>=4){
+      all=rec.toks.concat(rec.atoks);
+      for(i=0;i<all.length;i++){if(withinOne(all[i],t)){best=300;break;}}
+    }
+    return best;
+  }
+  /* everyday basics win ties against novelty items that merely share a prefix
+     ("rice" means rice, not rice cakes; "chick" means chicken, not nuggets) */
+  var STAPLE={};
+  ("Grilled chicken breast|Egg, large|Scrambled eggs|Whole milk|Milk, 2%|Whole-wheat bread|White bread|"+
+   "Brown rice, cooked|White rice, cooked|Pasta, cooked|Rolled oats, dry|Banana|Apple|Orange|Pear|"+
+   "Potato, baked with skin|Sweet potato, baked|Broccoli, steamed|Spinach, raw|Mixed salad greens|"+
+   "Tomato|Cucumber|Onion|Baby carrots|Bell pepper|Mushrooms|Corn kernels|Green peas|Avocado|"+
+   "Strawberries|Blueberries|Grapes|Cheddar cheese|Butter|Olive oil|Peanut butter|Almonds|"+
+   "Greek yogurt, plain 2%|Ground beef, 90% lean|Baked salmon fillet|Tuna, canned in water|"+
+   "Black beans, cooked|Lentils, cooked|Chickpeas, cooked|Firm tofu|Black coffee|Tea, unsweetened|"+
+   "Orange juice|Cola|Honey|Sugar, white").split("|").forEach(function(n){STAPLE[n]=1;});
+
+  function search(q,limit){
+    var terms=toks(q);
+    if(!terms.length)return [];
+    var low=q.toLowerCase().trim(), out=[];
+    INDEX.forEach(function(rec){
+      var sum=0,i,sc;
+      for(i=0;i<terms.length;i++){
+        sc=scoreTerm(rec,terms[i]);
+        if(!sc)return;
+        sum+=sc;
+      }
+      sc=sum/terms.length;
+      if(rec.name===low)sc+=400;
+      if(STAPLE[rec.f.name])sc+=200;                     /* basics before novelties */
+      sc+=Math.min(260,(state.usage[rec.f.id]||0)*45);   /* what you actually eat floats up */
+      sc-=rec.toks.length*7;                             /* plainer names first */
+      out.push({f:rec.f,s:sc});
+    });
+    out.sort(function(a,b){return b.s-a.s||a.f.id-b.f.id;});
+    return out.slice(0,limit).map(function(o){return o.f;});
+  }
+  /* "2 eggs" / "1.5 rice" / "3x banana" */
+  function parseQty(raw){
+    var m=raw.match(/^\s*(\d+(?:[.,]\d+)?)\s*(?:x\s*)?([a-zA-Z].*)$/);
+    if(m){
+      var n=parseFloat(m[1].replace(",","."));
+      if(n>0&&n<=50)return {q:n,text:m[2].trim()};
+    }
+    return {q:1,text:raw.trim()};
+  }
+  function hl(name,terms){
+    var low=name.toLowerCase(),r=[];
+    terms.forEach(function(t){
+      var i=low.indexOf(t);
+      if(i>-1)r.push([i,i+t.length]);
+    });
+    if(!r.length)return name;
+    r.sort(function(a,b){return a[0]-b[0];});
+    var merged=[r[0]],i,last;
+    for(i=1;i<r.length;i++){
+      last=merged[merged.length-1];
+      if(r[i][0]<=last[1])last[1]=Math.max(last[1],r[i][1]);
+      else merged.push(r[i]);
+    }
+    var out="",pos=0;
+    merged.forEach(function(m){
+      out+=name.slice(pos,m[0])+"<mark>"+name.slice(m[0],m[1])+"</mark>";
+      pos=m[1];
+    });
+    return out+name.slice(pos);
+  }
 
   /* ---------------- state ---------------- */
   function sampleState(){
+    var usage={};
+    [["Black coffee",7],["Rolled oats, dry",6],["Grilled chicken breast",6],["Greek yogurt, plain 2%",5],
+     ["Brown rice, cooked",4],["Banana",4],["Whey protein powder",4],["Almonds",3],["Egg, large",3],
+     ["Blueberries",3],["Broccoli, steamed",3],["Latte, whole milk",2],["Olive oil",3]]
+      .forEach(function(u){usage[byName(u[0])]=u[1];});
     return {
-      goal:2100, split:{p:30,c:40,f:30}, plain:false,
+      goal:2100, split:{p:30,c:40,f:30}, plain:false, usage:usage,
+      combos:[
+        {name:"Usual oats bowl",items:[["Rolled oats, dry",1],["Blueberries",1],["Whey protein powder",1],["Black coffee",1]]},
+        {name:"Chicken, rice & broccoli",items:[["Grilled chicken breast",1],["Brown rice, cooked",1],["Broccoli, steamed",1],["Olive oil",1]]},
+        {name:"Afternoon snack",items:[["Greek yogurt, plain 2%",1],["Almonds",1]]}
+      ].map(function(c){
+        return {name:c.name,items:c.items.map(function(it){return {f:byName(it[0]),q:it[1]};})};
+      }),
       log:{
         breakfast:[{f:byName("Rolled oats, dry"),q:1},{f:byName("Blueberries"),q:1},
                    {f:byName("Whey protein powder"),q:1},{f:byName("Black coffee"),q:1}],
@@ -469,9 +721,10 @@
       week:[2040,1880,2310,1960,2150,1740]
     };
   }
-  var KEY="plate-ledger-v1";
+  var KEY="plate-ledger-v2";
   var state=load()||sampleState();
   var meal=pickMeal();
+  var results=[], activeIdx=0;
 
   function load(){
     try{
@@ -479,6 +732,12 @@
       if(!s)return null;
       var o=JSON.parse(s);
       if(!o||!o.log||!o.goal)return null;
+      if(!o.usage)o.usage={};
+      if(!o.combos)o.combos=[];
+      /* drop anything pointing past the current table */
+      MEALS.forEach(function(m){
+        o.log[m.id]=(o.log[m.id]||[]).filter(function(e){return FOODS[e.f];});
+      });
       return o;
     }catch(e){return null;}
   }
@@ -492,11 +751,16 @@
     if(h<17)return "snack";
     return "dinner";
   }
+  function mealLabel(id){
+    for(var i=0;i<MEALS.length;i++){if(MEALS[i].id===id)return MEALS[i].label;}
+    return id;
+  }
 
   /* ---------------- math ---------------- */
+  var NUTS=["kcal","p","c","f","fib","sug","sat","sod"];
   function blank(){return {kcal:0,p:0,c:0,f:0,fib:0,sug:0,sat:0,sod:0};}
   function addInto(t,food,q){
-    ["kcal","p","c","f","fib","sug","sat","sod"].forEach(function(k){t[k]+=food[k]*q;});
+    NUTS.forEach(function(k){t[k]+=food[k]*q;});
     return t;
   }
   function mealTotals(id){
@@ -508,7 +772,7 @@
     var t=blank();
     MEALS.forEach(function(m){
       var mt=mealTotals(m.id);
-      ["kcal","p","c","f","fib","sug","sat","sod"].forEach(function(k){t[k]+=mt[k];});
+      NUTS.forEach(function(k){t[k]+=mt[k];});
     });
     return t;
   }
@@ -528,9 +792,10 @@
   var el={
     remain:$("#remain"),remainUnit:$("#remainUnit"),sumSub:$("#sumSub"),sumEaten:$("#sumEaten"),
     band:$("#band"),bandKey:$("#bandKey"),nudge:$("#nudge"),macros:$("#macros"),
-    macroTitle:$("#macroTitle"),macroSub:$("#macroSub"),log:$("#log"),logCount:$("#logCount"),
-    results:$("#results"),quick:$("#quick"),week:$("#week"),weekdays:$("#weekdays"),
-    weekAvg:$("#weekAvg"),nf:$("#nf"),sumCard:$("#sumCard"),addHint:$("#addHint")
+    macroSub:$("#macroSub"),log:$("#log"),logCount:$("#logCount"),
+    results:$("#results"),usuals:$("#usuals"),combos:$("#combos"),week:$("#week"),
+    weekdays:$("#weekdays"),weekAvg:$("#weekAvg"),nf:$("#nf"),sumCard:$("#sumCard"),
+    addHint:$("#addHint"),qtyTag:$("#qtyTag")
   };
 
   function renderSummary(){
@@ -547,7 +812,6 @@
         state.goal.toLocaleString()+"</b>."
       : "<b>"+pct(t.kcal,state.goal)+"%</b> of goal · protein <b>"+r0(t.p)+" g</b> of "+tg.p+" g";
 
-    // band by meal
     var max=Math.max(state.goal,t.kcal);
     el.band.innerHTML="";
     MEALS.forEach(function(m){
@@ -560,18 +824,15 @@
       el.band.appendChild(i);
     });
     el.bandKey.innerHTML=MEALS.map(function(m){
-      var k=r0(mealTotals(m.id).kcal);
-      return '<div><em style="background:'+MEALCOLOR[m.id]+'"></em>'+m.label+" "+k+"</div>";
+      return '<div><em style="background:'+MEALCOLOR[m.id]+'"></em>'+m.label+" "+r0(mealTotals(m.id).kcal)+"</div>";
     }).join("");
 
-    // nudge
-    var pLeft=tg.p-t.p, eaten=pct(t.kcal,state.goal);
-    var msg;
+    var pLeft=tg.p-t.p, eaten=pct(t.kcal,state.goal), msg;
     if(over){
       msg="<b>"+r0(-left)+" kcal past the plan.</b> Not a problem on its own — the week's average is what moves the needle.";
-    }else if(t.p<tg.p*0.6 && eaten>55){
+    }else if(t.p<tg.p*0.6&&eaten>55){
       msg="<b>Protein is behind pace.</b> "+r0(pLeft)+" g to go — that's a palm of chicken plus a cup of Greek yogurt.";
-    }else if(t.fib<14 && eaten>55){
+    }else if(t.fib<14&&eaten>55){
       msg="<b>Fiber is at "+r0(t.fib)+" g of 28.</b> Beans, berries or a pear with the skin on would close most of the gap.";
     }else if(t.kcal===0){
       msg="<b>Nothing logged yet.</b> Start with whatever you ate most recently — search it on the right.";
@@ -585,16 +846,15 @@
     var t=dayTotals(), tg=targets();
     el.macroSub.textContent=state.plain?"what today's food is made of":"grams so far / target";
     var defs=[
-      {k:"p",label:"Protein",v:t.p,t:tg.p,col:"var(--p)",note:"Keeps you full and repairs muscle."},
-      {k:"c",label:"Carbs",v:t.c,t:tg.c,col:"var(--c)",note:"Your main everyday fuel."},
-      {k:"f",label:"Fat",v:t.f,t:tg.f,col:"var(--f)",note:"Hormones, vitamins, and flavour."}
+      {label:"Protein",v:t.p,t:tg.p,col:"var(--p)",note:"Keeps you full and repairs muscle."},
+      {label:"Carbs",v:t.c,t:tg.c,col:"var(--c)",note:"Your main everyday fuel."},
+      {label:"Fat",v:t.f,t:tg.f,col:"var(--f)",note:"Hormones, vitamins, and flavour."}
     ];
     el.macros.innerHTML=defs.map(function(d){
-      var w=Math.min(100,pct(d.v,d.t));
       return '<div class="macro">'+
         '<div class="macro-name"><em style="background:'+d.col+'"></em>'+d.label+'</div>'+
         '<div class="macro-val num"><b>'+r0(d.v)+' g</b> / '+d.t+' g</div>'+
-        '<div class="track"><i style="width:'+w+'%;background:'+d.col+'"></i></div>'+
+        '<div class="track"><i style="width:'+Math.min(100,pct(d.v,d.t))+'%;background:'+d.col+'"></i></div>'+
         (state.plain?'<div class="macro-note">'+d.note+'</div>':'')+
       '</div>';
     }).join("")+
@@ -611,14 +871,13 @@
       var items=state.log[m.id], mt=mealTotals(m.id);
       var rows=items.length?items.map(function(e,i){
         var fd=FOODS[e.f];
-        var kc=fd.kcal*e.q;
         return '<div class="row">'+
           '<div><div class="row-name">'+fd.name+'</div>'+
             '<div class="row-meta">'+fd.portion+(e.q!==1?' × '+e.q:'')+'</div>'+
             (state.plain?'<div class="row-cue">'+CUE[fd.group]+'</div>':'')+
           '</div>'+
           '<div class="row-right">'+
-            '<span class="row-kcal num">'+r0(kc)+'</span>'+
+            '<span class="row-kcal num">'+r0(fd.kcal*e.q)+'</span>'+
             '<span class="step"><button type="button" data-act="dec" data-m="'+m.id+'" data-i="'+i+'" aria-label="Less '+fd.name+'">−</button>'+
             '<span class="q num">'+e.q+'</span>'+
             '<button type="button" data-act="inc" data-m="'+m.id+'" data-i="'+i+'" aria-label="More '+fd.name+'">+</button></span>'+
@@ -631,30 +890,26 @@
       }).join(""):'<p class="empty">Nothing here yet.</p>';
       return '<div class="meal"><div class="meal-head"><h3>'+m.label+'</h3>'+
         '<button class="meal-add" type="button" data-act="focus" data-m="'+m.id+'">+ add</button>'+
+        (items.length>1?'<button class="savebtn" type="button" data-act="savecombo" data-m="'+m.id+'">save as a meal</button>':'')+
         '<span class="kcal num">'+r0(mt.kcal)+' kcal</span></div>'+rows+'</div>';
     }).join("");
   }
 
   function renderWeek(){
-    var t=dayTotals();
-    var vals=state.week.concat([t.kcal]);
+    var vals=state.week.concat([dayTotals().kcal]);
     var max=Math.max.apply(null,vals.concat([state.goal]))*1.08;
-    var now=new Date();
-    var names=[];
-    for(var i=6;i>=0;i--){
-      var d=new Date(now.getTime()-i*864e5);
-      names.push(d.toLocaleDateString(undefined,{weekday:"short"}));
+    var now=new Date(), names=[], i;
+    for(i=6;i>=0;i--){
+      names.push(new Date(now.getTime()-i*864e5).toLocaleDateString(undefined,{weekday:"short"}));
     }
     el.week.innerHTML='<div class="goalline" style="bottom:'+(state.goal/max*100)+'%"><b>goal</b></div>'+
       vals.map(function(v,i){
-        var today=i===6, over=v>state.goal;
-        return '<div class="day'+(today?" today":"")+(over&&!today?" overday":"")+'">'+
+        var today=i===6;
+        return '<div class="day'+(today?" today":"")+(v>state.goal&&!today?" overday":"")+'">'+
           '<b class="num">'+r0(v/100)/10+'k</b>'+
           '<i style="height:'+Math.max(2,v/max*100)+'%"></i></div>';
       }).join("");
-    el.weekdays.innerHTML=names.map(function(n,i){
-      return '<div>'+(i===6?"Today":n)+'</div>';
-    }).join("");
+    el.weekdays.innerHTML=names.map(function(n,i){return '<div>'+(i===6?"Today":n)+'</div>';}).join("");
     var avg=vals.reduce(function(a,b){return a+b;},0)/7;
     el.weekAvg.innerHTML=state.plain
       ? 'Your daily average this week is <b class="num">'+r0(avg).toLocaleString()+'</b> — that average matters far more than any single day.'
@@ -685,49 +940,84 @@
       row("Protein",g(t.p),pct(t.p,DV.p),{thick:true})+
       '<p class="foot">'+(state.plain
         ? "The percentages compare today's food with a standard 2,000-calorie day. Under 5% is a little, over 20% is a lot."
-        : "*Percent Daily Values are based on a 2,000 calorie diet. Values are per-portion estimates from a built-in reference table.")+
+        : "*Percent Daily Values are based on a 2,000 calorie diet. One curated per-portion estimate per food.")+
       '</p>';
   }
 
-  var SUGGEST=["Grilled chicken breast","Rolled oats, dry","Banana","Cheese pizza","Whole-wheat bread","Avocado","Latte, whole milk","Vanilla ice cream"];
+  var STARTERS=["Grilled chicken breast","Rolled oats, dry","Banana","Whole-wheat bread","Egg, large","Cheese pizza"];
+  function usualFoods(n){
+    var ids=Object.keys(state.usage).filter(function(id){return FOODS[+id]&&state.usage[id]>0;});
+    ids.sort(function(a,b){return state.usage[b]-state.usage[a];});
+    var out=ids.map(function(id){return FOODS[+id];});
+    STARTERS.forEach(function(nm){
+      var f=FOODS[byName(nm)];
+      if(out.indexOf(f)===-1)out.push(f);
+    });
+    return out.slice(0,n);
+  }
+
   function renderSearch(){
-    var q=$("#q").value.trim().toLowerCase();
-    var list, heading;
-    if(!q){
-      list=SUGGEST.map(function(n){return FOODS[byName(n)];});
-      heading="A few to start with";
+    var raw=$("#q").value;
+    var parsed=parseQty(raw);
+    var terms=toks(parsed.text), heading, list;
+
+    el.qtyTag.hidden=parsed.q===1;
+    el.qtyTag.textContent="× "+parsed.q;
+
+    if(!terms.length){
+      list=usualFoods(6);
+      heading="Straight to your usuals";
     }else{
-      list=FOODS.filter(function(f){
-        return f.name.toLowerCase().indexOf(q)>-1 || f.group.toLowerCase().indexOf(q)>-1;
-      }).slice(0,9);
-      heading=list.length+" match"+(list.length===1?"":"es");
+      list=search(parsed.text,7);
+      heading=list.length?list.length+" match"+(list.length===1?"":"es"):"";
     }
+    results=list;
+    activeIdx=0;
+
     if(!list.length){
-      el.results.innerHTML='<li><p class="empty">No match. Try a simpler word — "rice", "milk", "bar".</p></li>';
+      el.results.innerHTML='<li><p class="empty">No food by that name. Try a plainer word — "rice", "milk", "bar".</p></li>';
       return;
     }
-    el.results.innerHTML='<li class="reshead">'+heading+'</li>'+list.map(function(f){
-      return '<li><button class="res" type="button" data-act="add" data-f="'+f.id+'">'+
-        '<span class="n">'+f.name+'</span>'+
-        '<span class="k num">'+f.kcal+'</span>'+
-        '<span class="m">'+f.portion+' · P '+r0(f.p)+' C '+r0(f.c)+' F '+r0(f.f)+'</span>'+
+    el.results.innerHTML='<li class="reshead">'+heading+'</li>'+list.map(function(f,i){
+      var used=state.usage[f.id]||0;
+      return '<li><button class="res'+(i===0?" active":"")+'" type="button" role="option" '+
+        'aria-selected="'+(i===0)+'" data-act="add" data-f="'+f.id+'">'+
+        '<span class="n">'+hl(f.name,terms)+(used>2?' <span class="used">· often</span>':'')+'</span>'+
+        '<span class="k num">'+r0(f.kcal*parsed.q)+'</span>'+
+        '<span class="m">'+f.portion+(parsed.q!==1?' × '+parsed.q:'')+
+          ' · P '+r0(f.p*parsed.q)+' C '+r0(f.c*parsed.q)+' F '+r0(f.f*parsed.q)+'</span>'+
       '</button></li>';
     }).join("");
   }
 
-  var QUICK=["Egg, large","Banana","Greek yogurt, plain 2%","Latte, whole milk","Cheese pizza","Almonds","Chicken burrito bowl","Apple"];
-  function renderQuick(){
-    el.quick.innerHTML='<span style="font-size:11.5px;color:var(--ink-3);align-self:center;margin-right:2px">Common:</span>'+
-      QUICK.map(function(n){
-        var f=FOODS[byName(n)];
+  function moveActive(d){
+    if(!results.length)return;
+    var btns=el.results.querySelectorAll(".res");
+    if(!btns.length)return;
+    btns[activeIdx].classList.remove("active");
+    btns[activeIdx].setAttribute("aria-selected","false");
+    activeIdx=(activeIdx+d+btns.length)%btns.length;
+    btns[activeIdx].classList.add("active");
+    btns[activeIdx].setAttribute("aria-selected","true");
+    btns[activeIdx].scrollIntoView({block:"nearest"});
+  }
+
+  function renderUsuals(){
+    el.usuals.innerHTML='<span class="quicklab">Your usuals:</span>'+
+      usualFoods(7).map(function(f){
         return '<button type="button" data-act="add" data-f="'+f.id+'">'+f.name.split(",")[0]+'</button>';
       }).join("");
   }
 
-  function renderMealSeg(){
-    $("#mealSeg").innerHTML=MEALS.map(function(m){
-      return '<button type="button" data-act="meal" data-m="'+m.id+'" aria-pressed="'+(m.id===meal)+'">'+m.label+'</button>';
-    }).join("");
+  function renderCombos(){
+    if(!state.combos.length){el.combos.innerHTML="";return;}
+    el.combos.innerHTML='<span class="quicklab">Saved meals:</span>'+
+      state.combos.map(function(c,i){
+        var kcal=c.items.reduce(function(a,it){return a+FOODS[it.f].kcal*it.q;},0);
+        return '<span class="combo"><button class="go" type="button" data-act="combo" data-i="'+i+'">'+
+          c.name+' <span class="num" style="color:var(--ink-3)">'+r0(kcal)+'</span></button>'+
+          '<button class="cx" type="button" data-act="uncombo" data-i="'+i+'" aria-label="Delete saved meal '+c.name+'">×</button></span>';
+      }).join("");
   }
 
   var PRESETS=[{n:"Lose",v:1700},{n:"Steady",v:2100},{n:"Gain",v:2500}];
@@ -745,8 +1035,15 @@
     if($("#goalInput").value!==String(state.goal))$("#goalInput").value=state.goal;
   }
 
+  function renderMealSeg(){
+    $("#mealSeg").innerHTML=MEALS.map(function(m){
+      return '<button type="button" data-act="meal" data-m="'+m.id+'" aria-pressed="'+(m.id===meal)+'">'+m.label+'</button>';
+    }).join("");
+  }
+
   function renderAll(){
-    renderSummary();renderMacros();renderLog();renderWeek();renderLabel();renderGoal();
+    renderSummary();renderMacros();renderLog();renderWeek();renderLabel();
+    renderGoal();renderUsuals();renderCombos();
     save();
     if(window.claude&&window.claude.hot&&window.claude.hot.snapshot){
       try{window.claude.hot.snapshot(function(){return {state:state,meal:meal};});}catch(e){}
@@ -760,32 +1057,57 @@
     t.textContent=msg;t.classList.add("on");
     clearTimeout(toastT);toastT=setTimeout(function(){t.classList.remove("on");},1700);
   }
+  function logFood(id,qty,silent){
+    var arr=state.log[meal], found=null;
+    arr.forEach(function(e){if(e.f===id)found=e;});
+    if(found)found.q=r1(found.q+qty); else arr.push({f:id,q:qty});
+    state.usage[id]=(state.usage[id]||0)+1;
+    if(!silent)toast(FOODS[id].name+(qty!==1?" × "+qty:"")+" → "+mealLabel(meal));
+  }
+  function clearSearch(){
+    $("#q").value="";renderSearch();
+  }
 
   document.addEventListener("click",function(ev){
     var b=ev.target.closest("[data-act]");
     if(!b)return;
-    var act=b.getAttribute("data-act");
+    var act=b.getAttribute("data-act"), m, i;
 
     if(act==="add"){
-      var f=FOODS[+b.getAttribute("data-f")];
-      var arr=state.log[meal];
-      var found=arr.filter(function(e){return e.f===f.id;})[0];
-      if(found){found.q=r1(found.q+1);}else{arr.push({f:f.id,q:1});}
+      var parsed=parseQty($("#q").value);
+      logFood(+b.getAttribute("data-f"),parsed.q);
+      clearSearch();renderAll();
+    }
+    else if(act==="combo"){
+      var c=state.combos[+b.getAttribute("data-i")];
+      c.items.forEach(function(it){logFood(it.f,it.q,true);});
       renderAll();
-      toast(f.name+" → "+MEALS.filter(function(m){return m.id===meal;})[0].label);
+      toast(c.name+" → "+mealLabel(meal));
+    }
+    else if(act==="uncombo"){
+      var gone=state.combos.splice(+b.getAttribute("data-i"),1)[0];
+      renderAll();toast("Deleted “"+gone.name+"”");
+    }
+    else if(act==="savecombo"){
+      m=b.getAttribute("data-m");
+      var items=state.log[m].map(function(e){return {f:e.f,q:e.q};});
+      if(!items.length)return;
+      var top=items.slice().sort(function(a,z){return FOODS[z.f].kcal*z.q-FOODS[a.f].kcal*a.q;})[0];
+      var nm=FOODS[top.f].name.split(",")[0]+" + "+(items.length-1);
+      state.combos.push({name:nm,items:items});
+      renderAll();toast("Saved as “"+nm+"” — one tap to log it again");
     }
     else if(act==="inc"||act==="dec"){
-      var m=b.getAttribute("data-m"),i=+b.getAttribute("data-i");
-      var e2=state.log[m][i];
-      var stepv=e2.q<1?0.25:0.5;
+      m=b.getAttribute("data-m");i=+b.getAttribute("data-i");
+      var e2=state.log[m][i], stepv=e2.q<1?0.25:0.5;
       e2.q=r1(act==="inc"?e2.q+stepv:e2.q-stepv);
       if(e2.q<=0)state.log[m].splice(i,1);
       renderAll();
     }
     else if(act==="del"){
-      var mm=b.getAttribute("data-m"),ii=+b.getAttribute("data-i");
-      var gone=FOODS[state.log[mm][ii].f].name;
-      state.log[mm].splice(ii,1);renderAll();toast("Removed "+gone);
+      m=b.getAttribute("data-m");i=+b.getAttribute("data-i");
+      var name=FOODS[state.log[m][i].f].name;
+      state.log[m].splice(i,1);renderAll();toast("Removed "+name);
     }
     else if(act==="meal"){
       meal=b.getAttribute("data-m");renderMealSeg();$("#q").focus();
@@ -799,18 +1121,21 @@
       state.goal=+b.getAttribute("data-v");renderAll();
     }
     else if(act==="split"){
-      var s=SPLITS[+b.getAttribute("data-i")];
-      state.split={p:s.p,c:s.c,f:s.f};renderAll();
+      var sp=SPLITS[+b.getAttribute("data-i")];
+      state.split={p:sp.p,c:sp.c,f:sp.f};renderAll();
     }
   });
 
   $("#q").addEventListener("input",renderSearch);
   $("#q").addEventListener("keydown",function(ev){
-    if(ev.key==="Enter"){
-      var first=el.results.querySelector(".res");
-      if(first){first.click();$("#q").value="";renderSearch();}
+    if(ev.key==="ArrowDown"){ev.preventDefault();moveActive(1);}
+    else if(ev.key==="ArrowUp"){ev.preventDefault();moveActive(-1);}
+    else if(ev.key==="Enter"){
+      ev.preventDefault();
+      var btns=el.results.querySelectorAll(".res");
+      if(btns[activeIdx])btns[activeIdx].click();
     }
-    if(ev.key==="Escape"){$("#q").value="";renderSearch();$("#q").blur();}
+    else if(ev.key==="Escape"){clearSearch();$("#q").blur();}
   });
   document.addEventListener("keydown",function(ev){
     if(ev.key==="/"&&document.activeElement!==$("#q")&&!/input|textarea/i.test(document.activeElement.tagName)){
@@ -825,16 +1150,16 @@
     state.plain=!state.plain;
     this.setAttribute("aria-pressed",String(state.plain));
     this.textContent=state.plain?"Plain English on":"Plain English";
-    $("#addHint").textContent=state.plain
-      ? "Tap anything you ate. One tap is one normal serving — the size cue under each item tells you what that looks like."
-      : "Tap a food to log one serving. Adjust the amount in the log with − and +.";
+    el.addHint.textContent=state.plain
+      ? "Tap anything you ate. One tap is one normal serving — the size cue under each item shows what that looks like."
+      : "↑ ↓ to move, ↵ to log. Type a number first — “2 eggs” logs two.";
     renderAll();
   });
   $("#resetBtn").addEventListener("click",function(){
     state=sampleState();meal=pickMeal();
     $("#plainBtn").setAttribute("aria-pressed","false");
     $("#plainBtn").textContent="Plain English";
-    $("#q").value="";renderSearch();renderMealSeg();renderAll();
+    clearSearch();renderMealSeg();renderAll();
     toast("Sample day restored");
   });
 
@@ -842,9 +1167,10 @@
   function start(hot){
     if(hot&&hot.state){state=hot.state;meal=hot.meal||meal;}
     $("#datechip").textContent=new Date().toLocaleDateString(undefined,{weekday:"long",month:"short",day:"numeric"});
+    $("#foodCount").textContent=FOODS.length+" foods, one entry each";
     $("#plainBtn").setAttribute("aria-pressed",String(!!state.plain));
     $("#plainBtn").textContent=state.plain?"Plain English on":"Plain English";
-    renderMealSeg();renderQuick();renderSearch();renderAll();
+    renderMealSeg();renderSearch();renderAll();
   }
   if(window.claude&&window.claude.hot&&window.claude.hot.ready){
     window.claude.hot.ready(start);
